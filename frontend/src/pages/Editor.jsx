@@ -10,7 +10,6 @@ import { java } from "@codemirror/lang-java";
 import { cpp } from "@codemirror/lang-cpp";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { autocompletion } from "@codemirror/autocomplete"; // Auto-completion
-import { closeBrackets } from "@codemirror/closebrackets"; // Auto-close brackets and quotes
 
 const CodeEditor = () => {
   const editorRef = useRef(null);
@@ -57,14 +56,14 @@ const CodeEditor = () => {
 
   return (
     <div>
-      <select onChange={(e) => setLanguage(e.target.value)} value={language} className="text-black bg-white">
+      <select onChange={(e) => setLanguage(e.target.value)} value={language} className="text-black bg-white rounded-md m-1">
         <option value="javascript">JavaScript</option>
         <option value="python">Python</option>
         <option value="html">HTML</option>
         <option value="cpp">C++</option>
         <option value="java">Java</option>
       </select>
-      <div ref={editorRef} className="border p-2 rounded-md" />
+      <div ref={editorRef} className="border p-2 rounded-md h-100vh" />
     </div>
   );
 };
