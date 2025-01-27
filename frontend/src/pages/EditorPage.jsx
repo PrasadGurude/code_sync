@@ -39,7 +39,7 @@ function EditorPage() {
                 </div>
             </div>
             <div className='editorWrap bg-slate-900 w-screen'>
-                <Editor />
+            <Editor/>
             </div>
         </div>
     )

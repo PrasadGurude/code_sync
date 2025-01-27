@@ -40,3 +40,9 @@
 .read-the-docs {
   color: #888;
 } */
+
+.editor-container {
+  height: 400px;
+  width: 100%;
+  border: 1px solid #ccc;
+}
