@@ -3,72 +3,108 @@ import Client from './Client';
 import Editor from './Editor';
 import { initSocket } from '../socket';
 import { ACTIONS } from '../Actions';
-import { useLocation } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 function EditorPage() {
     const location = useLocation();
     const socketRef = useRef(null);
-    const [clients, setClients] = useState([]);  // Ensure clients state is initialized as an empty array
+    const reactNavigator = useNavigate();
+    const [clients, setClients] = useState([]);  
 
     useEffect(() => {
         const init = async () => {
             socketRef.current = await initSocket();
+            socketRef.current.on('connect_error', (err) => handleErrors(err));
+            socketRef.current.on('connect_failed', (err) => handleErrors(err));
 
             socketRef.current.emit(ACTIONS.JOIN, {
                 roomId: location.state?.formData.roomId,
-                username: location.state?.formData?.username,
+                username: location.state?.formData.username,
             });
 
-            socketRef.current.on(ACTIONS.JOINED, ({ client }) => {
-                // Ensure the clients array is valid before updating state
-                console.log(client.username);
-                if (client && Array.isArray(client)) {
-                    setClients(prevClients => [...prevClients, client]);
+            function handleErrors(e) {
+                console.log('socket error', e);
+                toast.error('Socket connection failed, try again later');
+                reactNavigator('/');
+            }
+
+            socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId }) => {
+                if (username !== location.state?.formData.username) {
+                    toast.success(`${username} joined the room`);
                 }
+                setClients(clients);
             });
 
-            socketRef.current.on(ACTIONS.DISCONNECTED, ({ socketId }) => {
+            socketRef.current.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
+                toast.success(`${username} left the room`);
                 setClients(prevClients => prevClients.filter(client => client.socketId !== socketId));
             });
         };
-        
+
         init();
+
+        return () => {
+            if (socketRef.current) {
+                socketRef.current.disconnect();
+                socketRef.current.off(ACTIONS.JOINED);
+                socketRef.current.off(ACTIONS.DISCONNECTED);
+            }
+        };
     }, [location.state?.formData.roomId, location.state?.formData.username]);
+
+    if (!location.state) {
+        return <Navigate to="/" />;
+    }
 
     return (
         <div className='mainWrap h-screen flex text-white'>
-            <div className='aside bg-slate-950 w-56 p-2 px-3 flex flex-col overflow-y-auto scrollbar-hide'>
+            {/* Sidebar for showing connected users */}
+            <div className='aside bg-slate-950 w-56 p-4 flex flex-col overflow-y-auto scrollbar-hide'>
                 <div className="asideInner">
                     <div className='logo mb-2'>
                         <img src="/code-sync.png" alt="code-sync logo" />
                     </div>
                     <hr className='text-white mb-2' />
-                    <h2 className='font-bold '>Connected </h2>
-                    <div className='all_members flex justify-between flex-wrap'>
-                        {clients && Array.isArray(clients) && clients.length > 0 ? (
-                            clients.map((client) => {
-                                return client.username ? (
-                                    <Client key={client.socketId} username={client.username} />
-                                ) : (
-                                    <p key={client.socketId}>No username</p> // Fallback for missing username
-                                );
-                            })
+                    <h2 className='font-bold text-lg'>Connected Users</h2>
+
+                    {/* Clients Grid - 2 per row */}
+                    <div className='grid grid-cols-2 gap-2 mt-2'>
+                        {clients.length > 0 ? (
+                            clients.map((client) => (
+                                <Client key={client.socketId} username={client.username} />
+                            ))
                         ) : (
-                            <p>No clients connected</p> // Message when no clients are present
+                            <p className="text-gray-400 col-span-2 text-center">No users connected</p>
                         )}
                     </div>
                 </div>
-                <div className='flex flex-col w-full mt-auto '>
-                    <button className="btn hover:bg-gray-300 hover:cursor-pointer text-black bg-white mt-4 py-1 rounded-lg font-semibold ">
-                        Copy ROOM ID
+                
+                {/* Sidebar buttons */}
+                <div className='mt-auto'>
+                    <button
+                        onClick={() => {
+                            navigator.clipboard.writeText(location.state?.formData.roomId);
+                            toast.success('Room ID copied!');
+                        }}
+                        className="btn bg-white text-black py-1 rounded-lg font-semibold mt-4 hover:bg-gray-300 w-full">
+                        Copy Room ID
                     </button>
-                    <button className="btn hover:bg-green-800 hover:cursor-pointer bg-green-600 text-black rounded-lg mt-4 py-1 font-semibold mb-2">
-                        Leave
+
+                    <button
+                        onClick={() => {
+                            socketRef.current?.disconnect();
+                            reactNavigator('/');
+                        }}
+                        className="btn bg-red-600 text-white rounded-lg mt-4 py-1 font-semibold hover:bg-red-800 w-full">
+                        Leave Room
                     </button>
                 </div>
             </div>
-            <div className='editorWrap bg-slate-900 w-screen'>
-                <Editor />
+
+            {/* Code Editor */}
+            <div className='editorWrap bg-slate-900 w-full'>
+                <Editor socketRef={socketRef} roomId={location.state?.formData.roomId} />
             </div>
         </div>
     );

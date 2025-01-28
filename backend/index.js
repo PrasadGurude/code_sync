@@ -7,9 +7,19 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: "http://localhost:5173",  // Make sure this is the correct frontend URL
+        origin: "http://localhost:5173",  // Change this based on your frontend URL
     }
 });
+
+const userSocketMap = {};  // Maps socketId -> username
+const roomCodeMap = {};  // Stores the latest code for each room
+
+function getAllConnectedClients(roomId) {
+    return Array.from(io.sockets.adapter.rooms.get(roomId) || []).map((socketId) => ({
+        socketId,
+        username: userSocketMap[socketId],
+    }));
+}
 
 io.on('connection', (socket) => {
     console.log('User connected: ', socket.id);
@@ -17,23 +27,41 @@ io.on('connection', (socket) => {
     // Handle JOIN event (user enters a room)
     socket.on('join', ({ roomId, username }) => {
         console.log(`${username} joined room: ${roomId}`);
-        // Emit to others in the room
+        userSocketMap[socket.id] = username;
         socket.join(roomId);
-        socket.to(roomId).emit('joined', {
-            socketId: socket.id,
-            username,
-        });
+
+        const clients = getAllConnectedClients(roomId);
+        io.to(roomId).emit('joined', { clients, username, socketId: socket.id });
+
+        // Send the latest code to the newly joined client
+        if (roomCodeMap[roomId]) {
+            socket.emit('code_sync', { code: roomCodeMap[roomId] });
+        }
     });
 
-    // Handle DISCONNECTED event (user disconnects)
-    socket.on('disconnect', () => {
+    // Handle real-time code changes
+    socket.on('code_change', ({ roomId, code }) => {
+        roomCodeMap[roomId] = code; // Store latest code for the room
+        io.to(roomId).emit('code_change', { code });
+    });
+
+    // Handle user disconnection
+    socket.on('disconnecting', () => {
         console.log(`User disconnected: ${socket.id}`);
-        // Broadcast to room that someone has left
-        io.emit('disconnected', { socketId: socket.id });
+
+        const rooms = [...socket.rooms];
+        rooms.forEach((roomId) => {
+            socket.in(roomId).emit('disconnected', {
+                socketId: socket.id,
+                username: userSocketMap[socket.id]
+            });
+        });
+
+        delete userSocketMap[socket.id];
     });
 });
 
-// Make sure the server listens on a specific port
+// Start the server
 server.listen(3000, () => {
     console.log('Server is running on port 3000');
 });
